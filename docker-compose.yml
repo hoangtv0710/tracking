@@ -1,0 +1,83 @@
+version: '3'
+services:
+  mysql:
+    image: mariadb:10.3
+    ports:
+      - "8082:3306"
+    container_name: mariadb
+    # working_dir: /application
+    environment:
+      MYSQL_ROOT_PASSWORD: ahihi
+      MYSQL_DATABASE: matomo
+    restart: always
+    volumes:
+      - ./analytics_piwik.sql:/docker-entrypoint-initdb.d/analytics_piwik.sql
+
+  # phpmyadmin
+  phpmyadmin:
+    container_name: phpmyadmin
+    depends_on:
+      - mysql
+    image: phpmyadmin/phpmyadmin
+    restart: always
+    ports:
+      - '8080:80'
+    environment:
+      PMA_HOST: mysql
+      MYSQL_ROOT_PASSWORD: ahihi
+
+  #kafka
+  kafdrop:
+    container_name: kafdrop
+    image: obsidiandynamics/kafdrop
+    restart: "no"
+    ports:
+      - "9000:9000"
+    environment:
+      KAFKA_BROKERCONNECT: "kafka:29092"
+      JVM_OPTS: "-Xms16M -Xmx48M -Xss180K -XX:-TieredCompilation -XX:+UseStringDeduplication -noverify"
+    depends_on:
+      - "kafka"
+
+  kafka:    
+    container_name: kafka
+    environment:      
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_HOST_NAME: 127.0.0.1
+      KAFKA_LISTENERS: "INTERNAL://:29092,EXTERNAL://:9092"
+      KAFKA_ADVERTISED_LISTENERS: "INTERNAL://kafka:29092,EXTERNAL://localhost:9092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+      KAFKA_ZOOKEEPER_SESSION_TIMEOUT: "6000"
+      KAFKA_RESTART_ATTEMPTS: "10"
+      KAFKA_RESTART_DELAY: "5"
+      ZOOKEEPER_AUTOPURGE_PURGE_INTERVAL: "0"
+    image: wurstmeister/kafka    
+    ports:      
+      - "2181:2181"
+      - "32770:9092"    
+    volumes:      
+      - /var/run/docker.sock:/var/run/docker.sock    
+    depends_on:      
+      - zookeeper   
+
+  zookeeper:    
+    container_name: zookeeper
+    image: wurstmeister/zookeeper    
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 32181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:      
+      - "2182:2181"
+
+  website:
+    container_name: analytics
+    build: .
+    links:
+      - mysql
+    volumes:
+      - .:/var/www/html 
+    ports:
+      - 8090:80
+    depends_on:
+      - mysql
